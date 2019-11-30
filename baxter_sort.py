@@ -14,36 +14,95 @@ from baxter_interface import CHECK_VERSION
 bridge = cv_bridge.CvBridge()
 
 def image_callback(ros_img):
+    '''
+    Convert the image to HSV and based on boundaries, create masks to detect all red and blue objects
+    and then return the first red or blue object detected with a flag indicating the object color.
+    '''
+    
     # Convert the ROS image to an OpenCV image
     cv_image = bridge.imgmsg_to_cv2(ros_img, desired_encoding="passthrough")
+    height = image.shape[0]
+    width = image.shape[1]
 
-    # Find center coordinates of a red object
-    row_size = cv_image.shape[0]
-    col_size = cv_image.shape[1]
-    left = col_size
-    right = 0
-    top = row_size
-    down = 0
-    for r in range(1,row_size):
-        for c in range(1,col_size):
-            # Check if current pixel within RGB threshold values
-            pixel_b, pixel_g, pixel_r, _ = cv_image[r, c]
-            if pixel_b < 100 and pixel_g < 100 and pixel_r > 130:
-                if r < top:
-                    top = r
-                if r > down:
-                    down = r
-                if c < left:
-                    left = c
-                if c > right:
-                    right = c
-    center_r = (top+down)/2
-    center_c = (left+right)/2
-    print("{}, {}\n".format(center_r, center_c))
+    # Convert to an HSV image
+    hsv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
+
+    # Define HSV boundaries for red and blue
+    red_hsv_boundaries = [([0,160,80], [5,255,255]),
+                          ([170,160,80], [180,255,255])]
+    blue_hsv_boundaries = ([100,180,100], [140,255,255])
+
+    # Detect red and blue colors in the image and create masks
+    red_mask = None
+    for (lower, upper) in red_hsv_boundaries:
+        lower = np.array(lower, dtype = "uint8")
+        upper = np.array(upper, dtype = "uint8")
+
+        # Check if in range of boundaries
+        if red_mask is None:
+            red_mask = cv2.inRange(hsv_image, lower, upper)
+        else:
+            red_mask = cv2.bitwise_or(red_mask, cv2.inRange(hsv_image, lower, upper))
+
+    blue_mask = None
+    (lower, upper) = blue_hsv_boundaries
+    lower = np.array(lower, dtype = "uint8")
+    upper = np.array(upper, dtype = "uint8")
+    blue_mask = cv2.inRange(hsv_image, lower, upper)
+
+    # Reduce noise
+    kernel = np.ones((5,5),np.uint8)
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_CLOSE, kernel)
+    red_mask = cv2.morphologyEx(red_mask, cv2.MORPH_OPEN, kernel)
+    blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_CLOSE, kernel)
+    blue_mask = cv2.morphologyEx(blue_mask, cv2.MORPH_OPEN, kernel)
+
+    # Get the center coordinates of the first object that we detected
+    IS_RED = True
+    mask = cv2.bitwise_or(red_mask, blue_mask)
+    q = deque()
+    visited = [[0 for i in range(width)] for j in range(height)]
+    dr = [0, 1, 0, -1]
+    dc = [1, 0, -1, 0]
+    for r in range(height):
+        for c in range(width):
+            # print("{}, {}\n".format(r, c))
+            if mask[r, c] > 0 and visited[r][c] == 0:
+                if red_mask[r, c] > 0:
+                    IS_RED = True
+                else:
+                    IS_RED = False
+                # Initialize boundaries
+                left = width
+                right = 0
+                top = height
+                down = 0
+                # BFS through the entire object
+                q.appendleft((r, c))
+                visited[r][c] = 1
+                while q:
+                    (cur_row, cur_col) = q.pop()
+                    # Update boundaries
+                    top = min(top, cur_row)
+                    down = max(down, cur_row)
+                    left = min(left, cur_col)
+                    right = max(right, cur_col)
+                    # Add neighbors
+                    for i in range(4):
+                        if mask[cur_row+dr[i], cur_col+dc[i]] > 0 and visited[cur_row+dr[i]][cur_col+dc[i]] == 0:
+                            q.appendleft((cur_row+dr[i], cur_col+dc[i]))
+                            visited[cur_row+dr[i]][cur_col+dc[i]] = 1
+                # Return center
+                center_r = (top+down)/2
+                center_c = (left+right)/2
+                # print("{}, {}\n".format(center_r, center_c))
+                return center_r, center_c, IS_RED
+
     # cv2.imwrite('test_image.jpg', cv_image)
     # cv2.imshow('Image', cv_image)
     # cv2.waitKey(60000)
-    return center_r, center_c
+    print('Did not find any red or blue objects')
+    return None
 
 def movePos():
     left = baxter_interface.Limb('left')
