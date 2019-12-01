@@ -160,8 +160,32 @@ def goToPos(goal,pixels):
         
         curPose=left.endpoint_pose()
         cur=[curPose['position'].x,curPose['position'].y,curPose['position'].z]
-    print("End Position:{}".format(cur))
+    print("End Position:{}\n".format(cur))
 
+def sort_red_and_blue():
+    print("\nDetect...\n")
+    img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
+    goal_r, goal_c, IS_RED = image_callback(img)
+    leftg=baxter_interface.Gripper('left')
+    leftg.calibrate()
+    leftg.open()
+    
+    print("\nMove...\n")
+    goToPos([goal_r, goal_c, 0.1],1)
+
+    print("\nGrab...\n")
+    goToPos([goal_r, goal_c, -0.11],1)
+    leftg.close()
+    
+    print("\nPlace...\n")
+    goToPos([0.5, 0.5, 0],0)
+    leftg.open()
+    goToPos([0.5, 0.2, 0.1],0)
+    # rospy.Subscriber('/cameras/left_hand_camera/image', Image, image_callback)
+    #rospy.spin()
+
+    #moveForward()
+    #movePos()
 
 def main():
     print("\nInitializing node... ")
@@ -178,38 +202,15 @@ def main():
             cv2.destroyAllWindows()
     rospy.on_shutdown(clean_shutdown)
 
-    print("\nEnabling robot... ")
+    print("\nEnabling robot...\n")
     rs.enable()
     left = baxter_interface.Limb('left')
     ang=left.joint_angles()
     ang['left_w2']=-0.75
     left.move_to_joint_positions(ang)
-    
-    print("\nDetect...")
-    img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
-    goal_r, goal_c = image_callback(img)
-    leftg=baxter_interface.Gripper('left')
-    leftg.calibrate()
-    leftg.open()
-    
-    print("\nMove...")
-    goToPos([goal_r, goal_c, 0.1],1)
-    print("\nSecond Detect...")
-    img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
-    goal_r, goal_c = image_callback(img)
-    print("\nMove...")
-    goToPos([goal_r, goal_c, -0.11],1)
-    leftg.close()
-    
-    print("\nPlace...")
-    goToPos([0.5, 0.5, 0],0)
-    leftg.open()
-    goToPos([0.5, 0.2, 0.1],0)
-    # rospy.Subscriber('/cameras/left_hand_camera/image', Image, image_callback)
-    #rospy.spin()
 
-    #moveForward()
-    #movePos()
+    print("Sorting...\n")
+    sort_red_and_blue()
     
 #    done = False
 #    while not done and not rospy.is_shutdown():
