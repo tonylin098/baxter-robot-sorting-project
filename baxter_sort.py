@@ -89,7 +89,10 @@ def image_callback(ros_img):
                     right = max(right, cur_col)
                     # Add neighbors
                     for i in range(4):
-                        if mask[cur_row+dr[i], cur_col+dc[i]] > 0 and visited[cur_row+dr[i]][cur_col+dc[i]] == 0:
+                        if (0 <= cur_row+dr[i] and cur_row+dr[i] < height
+                            and 0 <= cur_col+dc[i] and cur_col+dc[i] < width
+                            and mask[cur_row+dr[i], cur_col+dc[i]] > 0
+                            and visited[cur_row+dr[i]][cur_col+dc[i]] == 0):
                             q.appendleft((cur_row+dr[i], cur_col+dc[i]))
                             visited[cur_row+dr[i]][cur_col+dc[i]] = 1
                 # Return center
