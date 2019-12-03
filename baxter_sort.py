@@ -1,7 +1,7 @@
-'''
-Program to make Baxter sort red and blue objects
-Written by Tony Lin and Jack Noyes
-'''
+#!/usr/bin/env python
+
+# Program to make Baxter sort red and blue objects
+# Written by Tony Lin and Jack Noyes
 
 import rospy, cv2, cv_bridge
 import numpy as np
@@ -10,6 +10,7 @@ import baxter_external_devices
 from sensor_msgs.msg import Image
 from baxter_pykdl import baxter_kinematics
 from baxter_interface import CHECK_VERSION
+from collections import deque
 
 bridge = cv_bridge.CvBridge()
 
@@ -21,16 +22,16 @@ def image_callback(ros_img):
     
     # Convert the ROS image to an OpenCV image
     cv_image = bridge.imgmsg_to_cv2(ros_img, desired_encoding="passthrough")
-    height = image.shape[0]
-    width = image.shape[1]
+    height = cv_image.shape[0]
+    width = cv_image.shape[1]
 
     # Convert to an HSV image
     hsv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
 
     # Define HSV boundaries for red and blue
-    red_hsv_boundaries = [([0,160,80], [5,255,255]),
-                          ([170,160,80], [180,255,255])]
-    blue_hsv_boundaries = ([100,180,100], [140,255,255])
+    red_hsv_boundaries = [([0,100,80], [5,255,255]),
+                          ([170,100,80], [180,255,255])]
+    blue_hsv_boundaries = ([100,100,50], [140,255,255])
 
     # Detect red and blue colors in the image and create masks
     red_mask = None
@@ -98,24 +99,20 @@ def image_callback(ros_img):
                 # Return center
                 center_r = (top+down)/2
                 center_c = (left+right)/2
-                # print("{}, {}\n".format(center_r, center_c))
+                print("{}, {}\n".format(center_r, center_c))
+                # output = cv2.bitwise_and(cv_image, cv_image, mask = mask)
+                # cv2.circle(output, (center_c, center_r), 7, (255, 255, 255), -1)
+                # cv2.imshow('Image', output)
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
                 return center_r, center_c, IS_RED
 
     # cv2.imwrite('test_image.jpg', cv_image)
-    # cv2.imshow('Image', cv_image)
-    # cv2.waitKey(60000)
+    # output = cv2.bitwise_and(cv_image, cv_image, mask = mask)
+    # cv2.imshow('Image', output)
+    # cv2.waitKey(0)
     print('Did not find any red or blue objects')
     return None
-
-def movePos():
-    left = baxter_interface.Limb('left')
-    cur=left.endpoint_pose()
-    print(cur)
-    
-    #pos=left.joint_angles()
-    #j='left_w0'
-    #pos[j]=pos[j]-0.25
-    #left.move_to_joint_positions(pos)
     
 
 def goToPos(goal,pixels):
@@ -125,9 +122,9 @@ def goToPos(goal,pixels):
     curPose=left.endpoint_pose()
     cur=[curPose['position'].x,curPose['position'].y,curPose['position'].z]
     if pixels:
-        factor=[0.001,0.0009]
-        goal[0]=-(goal[0]*factor[0]) + cur[0] + (200*factor[0])
-        goal[1]=-(goal[1]*factor[1]) + cur[1] + (320*factor[1])
+        factor=[0.0006,0.0006]
+        goal[0]= cur[0] + (200-goal[0])*factor[0] - 0.015
+        goal[1]= cur[1] + (320-goal[1])*factor[1] + 0.03
     
     print("\nGoal Position:{}\n".format(goal))
     print("Starting Position:{}\n".format(cur))
@@ -162,30 +159,43 @@ def goToPos(goal,pixels):
         cur=[curPose['position'].x,curPose['position'].y,curPose['position'].z]
     print("End Position:{}\n".format(cur))
 
+
 def sort_red_and_blue():
-    print("\nDetect...\n")
-    img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
-    goal_r, goal_c, IS_RED = image_callback(img)
-    leftg=baxter_interface.Gripper('left')
-    leftg.calibrate()
-    leftg.open()
-    
-    print("\nMove...\n")
-    goToPos([goal_r, goal_c, 0.1],1)
+    while(1):
+        print("\nDetect...\n")
+        img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
+        goal_r, goal_c, IS_RED = image_callback(img)
+        if goal_r is None:
+            break
+        leftg=baxter_interface.Gripper('left')
+        leftg.calibrate()
+        leftg.open()
+        
+        print("\nMove...\n")
+        goToPos([goal_r, goal_c, 0.1],1)
+        
+        print("\nSecond Detect...")
+        img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
+        goal_r, goal_c, IS_RED = image_callback(img)
+        print("\nMove...\n")
+        goToPos([goal_r, goal_c, 0.1],1)
 
-    print("\nGrab...\n")
-    goToPos([goal_r, goal_c, -0.11],1)
-    leftg.close()
-    
-    print("\nPlace...\n")
-    goToPos([0.5, 0.5, 0],0)
-    leftg.open()
-    goToPos([0.5, 0.2, 0.1],0)
-    # rospy.Subscriber('/cameras/left_hand_camera/image', Image, image_callback)
-    #rospy.spin()
-
-    #moveForward()
-    #movePos()
+        print("\nThird Detect...")
+        img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
+        goal_r, goal_c, IS_RED = image_callback(img)
+        print("\nGrab...\n")
+        goToPos([goal_r, goal_c, -0.13],1)
+        leftg.close()
+        
+        print("\nPlace...\n")
+        goToPos([goal_r, goal_c, 0.1],1)
+        if IS_RED:
+            goToPos([0.5, 0.5, 0.1],0)
+        else:
+            goToPos([0.5, 0, 0.1],0)
+            
+        leftg.open()
+        goToPos([0.57, 0.2, 0.11],0)
 
 def main():
     print("\nInitializing node... ")
