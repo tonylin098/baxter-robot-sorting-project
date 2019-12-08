@@ -104,18 +104,13 @@ def image_callback(ros_img):
                 # cv2.circle(output, (center_c, center_r), 7, (255, 255, 255), -1)
                 # cv2.imshow('Image', output)
                 # cv2.waitKey(0)
-                # cv2.destroyAllWindows()
                 return center_r, center_c, IS_RED
 
-    # cv2.imwrite('test_image.jpg', cv_image)
-    # output = cv2.bitwise_and(cv_image, cv_image, mask = mask)
-    # cv2.imshow('Image', output)
-    # cv2.waitKey(0)
     print('Did not find any red or blue objects')
-    return None
+    return None, None, None
     
 
-def goToPos(goal,pixels):
+def goToPos(goal, pixels):
     left = baxter_interface.Limb('left')
     myJacobian = baxter_kinematics('left')
     speed=0.025
@@ -161,10 +156,16 @@ def goToPos(goal,pixels):
 
 
 def sort_red_and_blue():
+    '''
+    While Baxter can still detect objects, keep sorting the objects, else break. Also, do
+    multiple object detections and movements to obtain a precise location over the object.
+    '''
+    
     while(1):
         print("\nDetect...\n")
         img = rospy.wait_for_message('/cameras/left_hand_camera/image', Image)
         goal_r, goal_c, IS_RED = image_callback(img)
+        # Break if could not detect any more objects
         if goal_r is None:
             break
         leftg=baxter_interface.Gripper('left')
@@ -221,14 +222,7 @@ def main():
 
     print("Sorting...\n")
     sort_red_and_blue()
-    
-#    done = False
-#    while not done and not rospy.is_shutdown():
-#        c = baxter_external_devices.getch()
-#        if c:
-#            # catch Esc or ctrl-c
-#            if c in ['\x1b', '\x03']:
-#                done = True
+
     rospy.signal_shutdown("Example finished.")
     print("Done.")
 
